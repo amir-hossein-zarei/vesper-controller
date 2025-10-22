@@ -1,0 +1,11 @@
+[project]
+name = "vesper-controller"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pyserial>=3.5",
+    "pyubx2>=1.2.58",
+    "types-pyserial>=3.5.0.20251001",
+]
