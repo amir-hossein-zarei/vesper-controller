@@ -193,8 +193,6 @@ if __name__ == "__main__":
             time.sleep(0.1)
             print(f"State after move command: {get_current_state()}")
 
-            print("\nSetting camera pan to 30, tilt to -10")
-            set_camera_pan_tilt(pan_angle=30, tilt_angle=-10)
             print(f"State after camera command: {get_current_state()}")
 
             time.sleep(1)
