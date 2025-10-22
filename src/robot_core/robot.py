@@ -3,11 +3,6 @@ import log
 from api.mavlink import VehicleModes
 from hardware_interface import communication
 from hardware_interface import motors
-from hardware_interface import sensors
-# from hardware_interface import camera
-from hardware_interface import gnss
-from hardware_interface import servo
-from config import LOG_REPEAT_INTERVAL
 from . import control, telemetry
 
 #    The main class representing the ROV.
