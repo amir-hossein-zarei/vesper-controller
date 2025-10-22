@@ -18,21 +18,21 @@ logger = log.getLogger(__name__)
 logger.info("Initializing ROV...")
 
 # --- State Variables ---
-is_armed = False
+is_armed = True
 custom_mode = VehicleModes.MANUAL  # Default mode
 
-roll = 0.0
-pitch = 0.0
-yaw = 0.0
-
-lat = 31.839417
-lon = 54.358292
-alt = 10.0
 # Target normalized (-1 to 1)
 current_target_movement = {
     "x": 0.0, "y": 0.0, "z": 0.0, "yaw": 0.0}
 current_thruster_outputs: list[float] = []  # Actual values sent to thrusters
 telemetry_data = {
+    "roll": 0.0,
+    "pitch": 0.0,
+    "yaw": 0.0,
+    "lat": 0,
+    "lon": 0,
+    "alt": 0,
+    "heading": 0.0,
     "depth": 0.0,
     "temperature": 0.0,
     "imu": {},  # e.g., {'ax': 0, 'ay': 0, 'az': 0, ...}
@@ -104,7 +104,7 @@ def set_movement_targets(x: float, y: float, z: float, yaw: float):
     logger.debug(
         f"Movement targets set: {current_target_movement}")
 
-    if is_armed and communication.is_connected():
+    if is_armed:
         thruster_outputs = control.calculate_thruster_outputs(
             x, y, z, yaw
         )
@@ -124,17 +124,6 @@ def update_telemetry(force_update=False):
         force_update (bool): If True, updates regardless of time since last update.
     """
     global telemetry_data, last_telemetry_update, last_telemetry_warning
-    if not communication.is_connected():
-        if time.monotonic() - last_telemetry_warning > LOG_REPEAT_INTERVAL:
-            logger.warning("Cannot update telemetry: ROV not connected.")
-            last_telemetry_warning = time.monotonic()
-        # Potentially clear or mark telemetry as stale
-        telemetry_data = {k: None for k in telemetry_data}
-        telemetry_data["camera_pan"] = telemetry_data.get(
-            "camera_pan", 0)  # Keep last known cam angles
-        telemetry_data["camera_tilt"] = telemetry_data.get(
-            "camera_tilt", 0)
-        return
 
     # Limit update frequency unless forced
     now = time.time()
@@ -163,43 +152,6 @@ def get_current_state() -> dict:
     }
 
 
-def set_camera_pan_tilt(pan_angle: int | None = None, tilt_angle: int | None = None) -> bool:
-    """Controls the camera pan and/or tilt via TTY commands."""
-    success = True
-    if not communication.is_connected():
-        logger.warning("Cannot control camera: ROV not connected.")
-        return False
-
-    if pan_angle is not None:
-        if servo.camera_pan(pan_angle):
-            telemetry_data["camera_pan"] = pan_angle
-        else:
-            logger.warning(f"Failed to set camera pan to {pan_angle}")
-            success = False
-
-    if tilt_angle is not None:
-        if servo.camera_tilt(tilt_angle):
-            telemetry_data["camera_tilt"] = tilt_angle
-        else:
-            logger.warning(
-                f"Failed to set camera tilt to {tilt_angle}")
-            success = False
-    return success
-
-
-def get_camera_feed_url() -> str | None:
-    """
-    Placeholder for getting a camera feed URL.
-    Actual video streaming typically doesn't go through the main TTY.
-    This might return an RTSP URL or similar if the camera has an IP interface.
-    """
-    # If your camera is an IP camera, you might store its URL here or in config.
-    # For a USB camera with OpenCV, the GUI would handle the frame capture directly.
-    logger.info(
-        "get_camera_feed_url() called. Note: TTY interface is for control, not primary video.")
-    return "http://<ROV_CAMERA_IP_ADDRESS_OR_STREAM_ENDPOINT>"  # Example
-
-
 def shutdown():
     """Safely shuts down the ROV."""
     logger.info("ROV Shutting down...")
@@ -216,21 +168,12 @@ def start():
     global roll, pitch, yaw
 
     logger.info("Starting ROV...")
-    communication.connect()
 
     try:
         while True:
             time.sleep(0.05)
             update_telemetry()
             state = get_current_state()
-            imu = state['telemetry'].get("imu", {}) or {}
-            if imu is None:
-                continue
-            roll, pitch, yaw = imu.get("gx", 0), imu.get(
-                "gy", 0), imu.get("gz", 0)
-            roll = roll / 180 * 3.1415
-            pitch = pitch / 180 * 3.1415
-            yaw = yaw / 180 * 3.1415
     except KeyboardInterrupt:
         pass
     finally:
