@@ -1,38 +1,28 @@
-from . import communication
+from config import ROV_I2C_BUS, ROV_I2C_ADDRESS, ROV_I2C_REGISTER
+from smbus2 import SMBus
 import log
 
 logger = log.getLogger(__name__)
+i2c = SMBus(ROV_I2C_BUS)
+
+motor_state = [1500, 1500, 1500, 1500]  # Neutral speeds for 4 motors
 
 
 def set_motor_speed(motor_id: int, speed: int) -> bool:
     """
     Sets the speed of a specific motor.
-    Args:
-        motor_id (int): The ID of the motor (e.g., 0 for front-left, 1 for front-right).
-        speed (int): The speed, e.g., -255 to 255 (0 is stop).
-                        The range and meaning depend on your hardware.
-    Returns:
-        bool: True if the command was likely sent successfully, False otherwise.
     """
-    # **IMPORTANT**: Replace "M" and the command format with your hardware's protocol.
-    # Example command: "M:<motor_id>:<speed>\n"
-    # e.g., "M:0:150" sets motor 0 to speed 150
-    # e.g., "M:1:-100" sets motor 1 to speed -100 (reverse)
-    command = f"M:{motor_id}:{speed}"
-
-    if communication.send_command(command):
-        logger.info(f"Motor {motor_id} speed set to {speed}")
-        # Optional: Wait for an acknowledgment if your hardware sends one
-        # ack = communication.read_line(timeout_override=0.5)
-        # if ack and "OK" in ack: # Or whatever your hardware returns
-        #     return True
-        # else:
-        #     logger.warning(f"No/invalid ACK for motor command: {command} -> {ack}")
-        #     return False
-        return True  # Assuming command sent is enough for now
-    else:
-        logger.error(
-            f"Failed to send command to set motor {motor_id} speed.")
+    global motor_state
+    try:
+        motor_state[motor_id] = speed
+        i2c.write_block_data(
+            ROV_I2C_ADDRESS,
+            ROV_I2C_REGISTER,
+            bytes(','.join(map(str, motor_state)), 'utf-8')
+        )
+        return True
+    except Exception as e:
+        logger.error(f"Failed to set motor {motor_id} speed to {speed}: {e}")
         return False
 
 
@@ -41,21 +31,17 @@ def stop_all_motors() -> bool:
     Stops all motors.
     This might involve sending individual stop commands or a global stop command.
     """
-    # **IMPORTANT**: Replace with your hardware's global stop command or loop
-    # Example: Assuming a global stop command "M:ALL:0"
-    command = "M:ALL:0"
-    # Or, if you need to stop them individually:
-    # success = True
-    # for i in range(num_motors):
-    #     if not set_motor_speed(i, 0):
-    #         success = False
-    # return success
-
-    if communication.send_command(command):
-        logger.info("All motors commanded to stop.")
+    global motor_state
+    try:
+        motor_state = [1500, 1500, 1500, 1500]  # Reset to neutral speeds
+        i2c.write_block_data(
+            ROV_I2C_ADDRESS,
+            ROV_I2C_REGISTER,
+            bytes(','.join(map(str, motor_state)), 'utf-8')
+        )
         return True
-    else:
-        logger.error("Failed to send stop all motors command.")
+    except Exception as e:
+        logger.error(f"Failed to stop all motors: {e}")
         return False
 
 
@@ -68,53 +54,31 @@ def set_thruster_speeds(speeds: list[int]) -> bool:
     Returns:
         bool: True if all commands were likely sent successfully, False otherwise.
     """
-    # Example: Sending commands for thrusters 0, 1, 2, 3
-    # This assumes your `set_motor_speed` handles individual thrusters
-    # and your `motor_id` maps to thruster indices.
-    all_successful = True
-    for i, speed_value in enumerate(speeds):
-        if not set_motor_speed(motor_id=i, speed=speed_value):
-            all_successful = False
-            logger.warning(f"Failed to set speed for thruster {i}")
+    global motor_state
+    if len(speeds) != len(motor_state):
+        logger.error(f"Expected {len(motor_state)} speeds, got {len(speeds)}.")
+        return False
 
-    if all_successful:
-        logger.info(f"Thruster speeds set: {speeds}")
-    else:
-        logger.error(
-            f"One or more thruster speed commands failed for speeds: {speeds}")
-    return all_successful
+    try:
+        motor_state = speeds
+        i2c.write_block_data(
+            ROV_I2C_ADDRESS,
+            ROV_I2C_REGISTER,
+            bytes(','.join(map(str, motor_state)), 'utf-8')
+        )
+        return True
+    except Exception as e:
+        logger.error(f"Failed to set thruster speeds {speeds}: {e}")
+        return False
 
 
 # Example Usage (if you were to test motors.py directly)
 if __name__ == "__main__":
-    # This assumes communication.py is in the same directory or Python path
-    # For actual use, it would be `from .communication import SerialCommunicator`
-    # from communication import SerialCommunicator # For standalone test
+    logger.info("Setting motor 0 speed to 1600")
+    set_motor_speed(0, 1600)
 
-    # --- Configuration ---
-    # Replace with your ROV's actual serial port and baud rate
-    ROV_SERIAL_PORT = "/dev/ttyS10"  # Use a virtual serial port pair for testing
-    ROV_BAUD_RATE = 9600
-    # --- End Configuration ---
+    logger.info("Setting all thruster speeds to [1600, 1400, 1500, 1500]")
+    set_thruster_speeds([1600, 1400, 1500, 1500])
 
-    if communication.is_connected():
-        import time
-
-        print("Setting motor 0 to speed 100")
-        set_motor_speed(0, 100)
-        time.sleep(1)  # Keep motor running for a bit
-
-        print("Setting motor 0 to speed -100 (reverse)")
-        set_motor_speed(0, -100)
-        time.sleep(1)
-
-        print("Setting thruster speeds [50, -50, 75, -75]")
-        set_thruster_speeds([50, -50, 75, -75])
-        time.sleep(2)
-
-        print("Stopping all motors")
-        stop_all_motors()
-
-        communication.disconnect()
-    else:
-        print(f"Failed to connect to {ROV_SERIAL_PORT} for motor control.")
+    logger.info("Stopping all motors")
+    stop_all_motors()

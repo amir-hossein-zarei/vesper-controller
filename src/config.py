@@ -1,6 +1,9 @@
 IP_ADDR = "255.255.255.255:14551"
 CAMERA_ID_OR_PIPELINE = "0"  # Default camera ID for OpenCV
 LOG_REPEAT_INTERVAL = 2  # Interval for repeating log messages
+ROV_I2C_BUS = 1  # I2C bus number for the ROV motor controller
+ROV_I2C_ADDRESS = 0x11  # I2C address for the ROV motor controller
+ROV_I2C_REGISTER = 0x00  # I2C register for motor commands
 ROV_SERIAL_PORT = "/dev/ttyACM0"
 ROV_BAUD_RATE = 115200
 GPS_SERIAL_PORT = "/dev/ttyUSB0"
