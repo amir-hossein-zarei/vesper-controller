@@ -165,6 +165,7 @@ def start():
     logger.info("Starting ROV...")
 
     try:
+        communication.connect()
         while True:
             time.sleep(0.05)
             update_telemetry()
