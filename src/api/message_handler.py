@@ -18,9 +18,12 @@ async def command_ack_handler(msg: mavlink.MAVLink_command_ack_message):
 
 
 async def manual_control_handler(msg: mavlink.MAVLink_manual_control_message):
-    print(f"{msg.buttons:016b}")
-    if msg.buttons & K_MODE_MANUAL:
-        print('meow')
+    robot.set_movement_targets(
+        x=msg.x,
+        y=msg.y,
+        z=msg.z,
+        yaw=msg.r,
+    )
 
 
 async def heartbeat_handler(msg: mavlink.MAVLink_heartbeat_message):

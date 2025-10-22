@@ -11,17 +11,27 @@ import math
 # - 2 thrusters for yaw (rotation)
 # - Strafing (sway) might be achieved by differential thrust or dedicated thrusters.
 
-# For simplicity, let's assume thruster outputs are scaled from -255 to 255.
-# This would be defined by your MotorController's expected input.
-THRUSTER_MAX_OUTPUT = 255
+THRUSTER_MIN_OUTPUT = 1000
+THRUSTER_MAX_OUTPUT = 2000
 
 
 logger = log.getLogger(__name__)
-num_thrusters = 6
+num_thrusters = 4
 # You might initialize PID controllers here if you plan to use them for stability.
 # e.g., depth_pid = PIDController(kp=..., ki=..., kd=...)
 logger.info(
     f"ROVControlSystem initialized for {num_thrusters} thrusters.")
+
+
+def map_value(value: float, in_min: float, in_max: float, out_min: float, out_max: float) -> float:
+    """Maps a value from one range to another."""
+    # Ensure the input value is within the expected range
+    if in_min == in_max:
+        raise ValueError("Input min and max cannot be the same.")
+    # Perform the mapping
+    mapped_value = (value - in_min) * (out_max - out_min) / \
+        (in_max - in_min) + out_min
+    return mapped_value
 
 
 def calculate_thruster_outputs(x: float, y: float, z: float, yaw: float) -> list[int]:
@@ -36,73 +46,18 @@ def calculate_thruster_outputs(x: float, y: float, z: float, yaw: float) -> list
         list[int]: A list of thruster output values (e.g., scaled -255 to 255).
                     The order depends on your MotorController's thruster indexing.
     """
-    # This is a VERY simplified mixing algorithm.
-    # Real ROV control requires a proper thruster allocation matrix (TAM)
-    # based on the geometry and orientation of each thruster.
 
-    # --- Conceptual Thruster Mapping (Example for 6 thrusters) ---
-    # Thruster IDs (indices for the output list):
-    # 0: Forward Port (Front Left)
-    # 1: Forward Starboard (Front Right)
-    # 2: Vertical Port (Mid Left)
-    # 3: Vertical Starboard (Mid Right)
-    # 4: Yaw/Strafe Port (Rear Left or dedicated strafe)
-    # 5: Yaw/Strafe Starboard (Rear Right or dedicated strafe)
+    throttle = x
+    strafe = y
 
-    # Use float for intermediate calculations
-    thrusters = [0.0] * num_thrusters
+    thrusters = [throttle] * num_thrusters
 
-    # 1. Surge (Forward/Backward - X)
-    # Assuming thrusters 0 and 1 contribute to surge
-    surge_thrust_component = x * THRUSTER_MAX_OUTPUT
-    thrusters[0] += surge_thrust_component
-    thrusters[1] += surge_thrust_component
+    if strafe > 0:
+        thrusters[2] = thrusters[3] = thrusters[3] * strafe
+    else:
+        thrusters[0] = thrusters[1] = thrusters[1] * -strafe
 
-    # 2. Heave (Up/Down - Z)
-    # Assuming thrusters 2 and 3 contribute to heave
-    heave_thrust_component = z * THRUSTER_MAX_OUTPUT
-    thrusters[2] += heave_thrust_component
-    thrusters[3] += heave_thrust_component
-
-    # 3. Yaw (Rotation - Yaw)
-    # Assuming thrusters 0 & 1 (differentially) or 4 & 5 contribute to yaw
-    yaw_thrust_component = yaw * THRUSTER_MAX_OUTPUT
-    # Example: Differential thrust on forward thrusters for yaw
-    # Port thruster more forward for right turn (positive yaw)
-    thrusters[0] += yaw_thrust_component
-    # Starboard thruster more reverse for right turn
-    thrusters[1] -= yaw_thrust_component
-
-    # (Alternative or additional yaw using dedicated thrusters 4 and 5)
-    # If thrusters 4 and 5 are horizontal and opposing for yaw:
-    # thrusters[4] += yaw_thrust_component
-    # thrusters[5] -= yaw_thrust_component
-
-    # 4. Sway (Strafe Left/Right - Y)
-    # This often involves vectoring main thrusters or dedicated side thrusters.
-    # For this simplified example, we might use thrusters 4 and 5 if available and oriented for sway.
-    if num_thrusters >= 6:  # Assuming thrusters 4 and 5 are for sway
-        sway_thrust_component = y * THRUSTER_MAX_OUTPUT
-        # Example: Thrusters 4 (port side) and 5 (starboard side) push in the same direction for sway.
-        # To strafe right (positive y), both might push right.
-        thrusters[4] += sway_thrust_component
-        thrusters[5] += sway_thrust_component
-
-    # Normalize/Clamp thruster outputs to be within [-THRUSTER_MAX_OUTPUT, THRUSTER_MAX_OUTPUT]
-    # A more sophisticated approach involves scaling down all thruster values proportionally
-    # if any single thruster command exceeds the maximum, to maintain the desired maneuver shape.
-
-    # Simple clamping:
-    scaled_thrusters_int = []
-    for t_val in thrusters:
-        clamped_val = max(-THRUSTER_MAX_OUTPUT,
-                          min(THRUSTER_MAX_OUTPUT, t_val))
-        # Round before converting to int
-        scaled_thrusters_int.append(int(round(clamped_val)))
-
-    logger.debug(
-        f"Input: x={x:.2f},y={y:.2f},z={z:.2f},yaw={yaw:.2f} -> Raw Thrusters: {[f'{t:.2f}' for t in thrusters]} -> Scaled Int: {scaled_thrusters_int}")
-    return scaled_thrusters_int
+    return [int(map_value(t, -1.0, 1.0, -THRUSTER_MIN_OUTPUT, THRUSTER_MAX_OUTPUT)) for t in thrusters]
 
 
 def maintain_depth(current_depth: float, target_depth: float, dt: float) -> float:
@@ -141,59 +96,12 @@ def maintain_depth(current_depth: float, target_depth: float, dt: float) -> floa
 
 # Example Usage
 if __name__ == "__main__":
-    # Enable debug logging for this test
-    logging.basicConfig(level=logging.DEBUG)
+    # Simulate desired movement commands
+    x_input = 0.8  # Forward
+    y_input = 0.2  # Slight right strafe
+    z_input = 0.0  # No vertical movement
+    yaw_input = 0.0  # No rotation
 
-    print("--- Testing ROV Control System ---")
-
-    test_cases: list[dict] = [
-        {"desc": "Forward (0.5)", "inputs": {
-            "x": 0.5, "y": 0.0, "z": 0.0, "yaw": 0.0}},
-        {"desc": "Backward (-0.3)", "inputs": {"x": -0.3,
-                                               "y": 0.0, "z": 0.0, "yaw": 0.0}},
-        {"desc": "Heave Up (0.7)", "inputs": {
-            "x": 0.0, "y": 0.0, "z": 0.7, "yaw": 0.0}},
-        {"desc": "Heave Down (-0.4)", "inputs": {"x": 0.0,
-                                                 "y": 0.0, "z": -0.4, "yaw": 0.0}},
-        {"desc": "Yaw Right (0.3)", "inputs": {
-            "x": 0.0, "y": 0.0, "z": 0.0, "yaw": 0.3}},
-        {"desc": "Yaw Left (-0.6)", "inputs": {"x": 0.0,
-                                               "y": 0.0, "z": 0.0, "yaw": -0.6}},
-        {"desc": "Strafe Right (0.6) (6 thrusters)", "inputs": {
-            "x": 0.0, "y": 0.6, "z": 0.0, "yaw": 0.0}},
-        {"desc": "Strafe Left (-0.2) (6 thrusters)",
-         "inputs": {"x": 0.0, "y": -0.2, "z": 0.0, "yaw": 0.0}},
-        {"desc": "Combined: Fwd(0.5) & YawR(0.3)", "inputs": {
-            "x": 0.5, "y": 0.0, "z": 0.0, "yaw": 0.3}},
-        {"desc": "Combined: Fwd(0.8),StrafeR(0.4),HeaveU(0.2),YawL(-0.1)",
-         "inputs": {"x": 0.8, "y": 0.4, "z": 0.2, "yaw": -0.1}},
-        {"desc": "Exceed limits (x=1.0, yaw=1.0)", "inputs": {
-            "x": 1.0, "y": 0.0, "z": 0.0, "yaw": 1.0}},  # Should clamp
-    ]
-
-    for case in test_cases:
-        print(f"\n{case['desc']}:")
-        outputs = calculate_thruster_outputs(**case['inputs'])
-        # The expected outputs below are based on the VERY simple mixing logic.
-        # Your actual thruster configuration will yield different results.
-        # E.g., for Forward (0.5), x=0.5*255=127.5. thrusters[0]=127.5, thrusters[1]=127.5
-        # For Yaw Right (0.3), yaw=0.3*255=76.5. thrusters[0]+=76.5, thrusters[1]-=76.5
-        # So Fwd(0.5)&YawR(0.3) -> t0=127.5+76.5=204, t1=127.5-76.5=51
-        print(f"  Inputs: {case['inputs']}")
-        print(f"  Outputs: {outputs}")
-
-    print("\n--- Testing Depth Hold (Simple Proportional) ---")
-    depth_correction1 = maintain_depth(
-        current_depth=10.0, target_depth=12.0, dt=0.1)
-    print(
-        f"Maintain depth (10m -> 12m): Z-correction = {depth_correction1:.2f} (Should be positive for going down)")
-
-    depth_correction2 = maintain_depth(
-        current_depth=15.0, target_depth=12.0, dt=0.1)
-    print(
-        f"Maintain depth (15m -> 12m): Z-correction = {depth_correction2:.2f} (Should be negative for going up)")
-
-    depth_correction3 = maintain_depth(
-        current_depth=12.0, target_depth=12.0, dt=0.1)
-    print(
-        f"Maintain depth (12m -> 12m): Z-correction = {depth_correction3:.2f} (Should be zero)")
+    thruster_outputs = calculate_thruster_outputs(
+        x_input, y_input, z_input, yaw_input)
+    logger.info(f"Calculated Thruster Outputs: {thruster_outputs}")
