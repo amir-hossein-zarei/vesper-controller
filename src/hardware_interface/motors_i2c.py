@@ -1,7 +1,9 @@
-from . import communication
+from config import ROV_I2C_BUS, ROV_I2C_ADDRESS, ROV_I2C_REGISTER
+from smbus2 import SMBus
 import log
 
 logger = log.getLogger(__name__)
+i2c = SMBus(ROV_I2C_BUS)
 
 motor_state = [1500, 1500, 1500, 1500]  # Neutral speeds for 4 motors
 
@@ -13,7 +15,11 @@ def set_motor_speed(motor_id: int, speed: int) -> bool:
     global motor_state
     try:
         motor_state[motor_id] = speed
-        communication.send_command(','.join(map(str, motor_state)))
+        i2c.write_block_data(
+            ROV_I2C_ADDRESS,
+            ROV_I2C_REGISTER,
+            bytes(','.join(map(str, motor_state)), 'utf-8')
+        )
         return True
     except Exception as e:
         logger.error(f"Failed to set motor {motor_id} speed to {speed}: {e}")
@@ -28,7 +34,11 @@ def stop_all_motors() -> bool:
     global motor_state
     try:
         motor_state = [1500, 1500, 1500, 1500]  # Reset to neutral speeds
-        communication.send_command(','.join(map(str, motor_state)))
+        i2c.write_block_data(
+            ROV_I2C_ADDRESS,
+            ROV_I2C_REGISTER,
+            bytes(','.join(map(str, motor_state)), 'utf-8')
+        )
         return True
     except Exception as e:
         logger.error(f"Failed to stop all motors: {e}")
@@ -51,7 +61,11 @@ def set_thruster_speeds(speeds: list[int]) -> bool:
 
     try:
         motor_state = speeds
-        communication.send_command(','.join(map(str, motor_state)))
+        i2c.write_block_data(
+            ROV_I2C_ADDRESS,
+            ROV_I2C_REGISTER,
+            bytes(','.join(map(str, motor_state)), 'utf-8')
+        )
         return True
     except Exception as e:
         logger.error(f"Failed to set thruster speeds {speeds}: {e}")
